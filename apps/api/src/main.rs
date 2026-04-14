@@ -1,7 +1,10 @@
 pub mod state;
-pub mod models;
+
+pub mod error;
 pub mod handlers;
+pub mod models;
 pub mod utilities;
+pub mod auth;
 
 use std::env;
 use axum::{
@@ -11,7 +14,7 @@ use sqlx::postgres::PgPoolOptions;
 use serde_json::{Value, json};
 
 use crate::state::AppState;
-use crate::handlers::auth::{register, get_salt};
+use crate::handlers::auth::{register, get_salt, login};
 
 // The #[tokio::main] macro tells Rust to run this main function 
 // using the Tokio async engine.
@@ -20,9 +23,11 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     let db_url = env::var("DATABASE_URL")
-        .expect(fatal_str!("DATABASE_URL is not set"));
+        .expect(&fatal_str!("env DATABASE_URL is not set"));
     let email_peeper = env::var("EMAIL_PEEPER")
-        .expect(fatal_str!("EMAIL_PEEPER is not set"));
+        .expect(&fatal_str!("env EMAIL_PEEPER is not set"));
+    let jwt_secret = env::var("JWT_SECRET")
+        .expect(&fatal_str!("env JWT_SECRET is not set"));
 
     // Database connection
     println!("Connecting to database...");
@@ -30,12 +35,13 @@ async fn main() {
         .max_connections(5)
         .connect(&db_url)
         .await
-        .expect(fatal_str!("Failed to connect to the database. Maybe the DATABASE_URL is not correctly set"));
+        .expect(&fatal_str!("Failed to connect to the database. Maybe the DATABASE_URL is not correctly set"));
 
     // Set state
     let state = AppState { 
         db: pool,
-        email_peeper: email_peeper
+        email_peeper: email_peeper,
+        jwt_secret: jwt_secret
     };
 
     // Application router
@@ -43,6 +49,7 @@ async fn main() {
         .route("/", get(health_check))
         .route("/auth/register", post(register))
         .route("/auth/salt", get(get_salt))
+        .route("/auth/login", get(login))
         .with_state(state);
 
     // Listening address + port

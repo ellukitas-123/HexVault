@@ -3,7 +3,8 @@ use serde_json::{json, Value};
 use crypto::{hash_email, hash_password};
 use crate::{audit, error};
 use crate::state::AppState;
-use crate::models::user::{GetSaltPayload, RegisterPayload};
+use crate::models::user::{GetSaltPayload, LoginPayload, RegisterPayload};
+use crate::auth::claims::Claims;
 
 pub async fn register(
     State(state): State<AppState>, // Get database from AppState
@@ -73,6 +74,59 @@ pub async fn get_salt(
             Json(json!({
                 "status": "error",
                 "message": "Couldn't obtain salt. Email might not be correct"
+            }))
+        }
+    }
+}
+
+pub async fn login(
+    State(state): State<AppState>, // Get database from AppState
+    Json(payload): Json<LoginPayload>, // Extract + validate req body
+) -> Json<Value> {
+    // Query
+    let result = sqlx::query!(
+        r#"
+        SELECT master_password_hash, id
+        FROM users
+        WHERE email_hash = $1
+        "#,
+        hash_email(&payload.email, &state.email_peeper),
+    )
+    .fetch_one(&state.db) // Execute the query using our DB pool
+    .await;
+
+    // Check and send result
+    match result {
+        Ok(record) => {
+            if record.master_password_hash != hash_password(&payload.password) {
+                error!("Failed to login (bad password)");
+                Json(json!({
+                    "status": "unathorized",
+                    "message": "Email or Password is not correct",
+                }))
+            } else {
+                let claims = Claims::new(record.id);
+                
+                match claims.encode(&state.jwt_secret) {
+                    Ok(token) => Json(json!({
+                        "status": "success",
+                        "message": "Logged in with token",
+                        "token": token
+                    })),
+                    Err(e) => {
+                        Json(json!({
+                            "status": "error",
+                            "message": "Could not generate session token"
+                        }))
+                    }
+                }
+            }
+        },
+        Err(e) => {
+            error!("Failed to login: {}", e);
+            Json(json!({
+                "status": "unathorized",
+                "message": "Email or Password is not correct",
             }))
         }
     }

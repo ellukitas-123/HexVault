@@ -12,3 +12,9 @@ pub struct RegisterPayload {
 pub struct GetSaltPayload {
     pub email: String
 }
+
+#[derive(Deserialize)]
+pub struct LoginPayload {
+    pub email: String,
+    pub password: String
+}
