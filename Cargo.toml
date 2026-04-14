@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "apps/api", 
+    "packages/crypto",
+]
+
+# Modern deps resolver
+resolver = "2"
