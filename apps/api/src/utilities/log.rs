@@ -28,12 +28,7 @@ macro_rules! fatal {
 
 #[macro_export]
 macro_rules! fatal_str {
-    // If you pass multiple things: fatal_str!("{} - {}", a, b)
-    ($fmt:expr, $($arg:tt)*) => {
-        &format!("[🚨 FATAL] {}", format!($fmt, $($arg)*))
-    };
-    // If you pass one thing: fatal_str!("Error!") or fatal_str!(my_var)
-    ($arg:expr) => {
-        &format!("[🚨 FATAL] {}", $arg)
+    ($($arg:tt)*) => {
+        format!("[🚨 FATAL] {}", format_args!($($arg)*))
     };
 }
