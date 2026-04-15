@@ -1,8 +1,9 @@
+use axum::extract::path::ErrorKind;
 use serde::{Deserialize, Serialize};
 use chrono::{Utc, Duration};
-use jsonwebtoken::{encode, Header, EncodingKey};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use uuid::Uuid;
-use crate::{error};
+use crate::{audit, error};
 use crate::error::{AppError};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +33,28 @@ impl Claims {
                 // Use your audit macro to log the real error
                 error!("JWT Encoding Failed: {}", e);
                 AppError::InternalServer("Could not generate session token".into())
+            })
+    }
+
+    pub fn decode(token: &str, secret: &str) -> Result<Self, AppError> {
+        let key = DecodingKey::from_secret(secret.as_ref());
+        let validation = Validation::new(Algorithm::HS256);
+
+        decode::<Self>(token, &key, &validation)
+            .map(|token_data| token_data.claims) // Extract the claims from wrapper
+            .map_err(|e| {
+                match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                        // Expired JWT
+                        AppError::Unauthorized
+                    }
+                    _ => {
+                        // Log crypto errors internally.
+                        // Bad signature or internal errors
+                        audit!("JWT Decode Error: {}", e); 
+                        AppError::Unauthorized
+                    }
+                }
             })
     }
 }
