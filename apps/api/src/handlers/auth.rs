@@ -1,3 +1,5 @@
+use axum::http::header::SET_COOKIE;
+use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, Json};
 use serde_json::{json, Value};
 use crypto::{hash_email, hash_password};
@@ -98,11 +100,28 @@ pub async fn login(
                 let claims = Claims::new(record.id);
                 
                 match claims.encode(&state.jwt_secret) {
-                    Ok(token) => Ok(Json(json!({
-                        "status": "success",
-                        "message": "Logged in with token",
-                        "token": token
-                    }))),
+                    Ok(token) => {
+                        // Create a HeaderMap
+                        let mut headers = HeaderMap::new();
+                        
+                        // Build the secure cookie string
+                        let cookie_str = format!(
+                            "HV_tk={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400",
+                            token
+                        );
+                        
+                        // 3. Insert the Set-Cookie header
+                        headers.insert(
+                            SET_COOKIE,
+                            HeaderValue::from_str(&cookie_str)
+                                .map_err(|_| AppError::InternalServer("Invalid header value".into()))?
+                        );
+
+                        Ok(Json(json!({
+                            "status": "success",
+                            "message": "Logged in with token saved into cookies",
+                        })))
+                    },
                     Err(e) => Err(e)
                 }
             }
