@@ -1,6 +1,7 @@
 use axum::{extract::State, Json};
 use serde_json::{json, Value};
 use crypto::{hash_email, hash_password};
+use crate::error::AppError;
 use crate::{audit, error};
 use crate::state::AppState;
 use crate::models::user::{GetSaltPayload, LoginPayload, RegisterPayload};
@@ -9,7 +10,7 @@ use crate::auth::claims::Claims;
 pub async fn register(
     State(state): State<AppState>, // Get database from AppState
     Json(payload): Json<RegisterPayload>, // Extract + validate req body
-) -> Json<Value> {
+) -> Result<Json<Value>, AppError> {
     // Query
     let result = sqlx::query!(
         r#"
@@ -28,18 +29,15 @@ pub async fn register(
     match result {
         Ok(record) => {
             audit!("New User Registered: {}", record.id);
-            Json(json!({
+
+            Ok(Json(json!({
                 "status": "success",
                 "message": "User securely registered",
                 "user_id": record.id
-            }))
+            })))
         },
         Err(e) => {
-            error!("Failed to register user: {}", e);
-            Json(json!({
-                "status": "error",
-                "message": "Registration failed. User might already exist."
-            }))
+            Err(AppError::InternalServer(format!("Registration failed. {}", e)))
         }
     }
 }
@@ -47,7 +45,7 @@ pub async fn register(
 pub async fn get_salt(
     State(state): State<AppState>, // Get database from AppState
     Json(payload): Json<GetSaltPayload>, // Extract + validate req body
-) -> Json<Value> {
+) -> Result<Json<Value>, AppError> {
     // Query
     let result = sqlx::query!(
         r#"
@@ -62,19 +60,14 @@ pub async fn get_salt(
 
     // Check and send result
     match result {
-        Ok(record) => {
-            Json(json!({
+        Ok(record) => Ok(Json(json!({
                 "status": "success",
                 "message": "Salt retrieved",
                 "salt": record.salt
-            }))
-        },
+            }))),
         Err(e) => {
             error!("Failed to get salt: {}", e);
-            Json(json!({
-                "status": "error",
-                "message": "Couldn't obtain salt. Email might not be correct"
-            }))
+            Err(AppError::NotFound)
         }
     }
 }
@@ -82,7 +75,7 @@ pub async fn get_salt(
 pub async fn login(
     State(state): State<AppState>, // Get database from AppState
     Json(payload): Json<LoginPayload>, // Extract + validate req body
-) -> Json<Value> {
+) -> Result<Json<Value>, AppError> {
     // Query
     let result = sqlx::query!(
         r#"
@@ -100,34 +93,23 @@ pub async fn login(
         Ok(record) => {
             if record.master_password_hash != hash_password(&payload.password) {
                 error!("Failed to login (bad password)");
-                Json(json!({
-                    "status": "unathorized",
-                    "message": "Email or Password is not correct",
-                }))
+                Err(AppError::Unauthorized)
             } else {
                 let claims = Claims::new(record.id);
                 
                 match claims.encode(&state.jwt_secret) {
-                    Ok(token) => Json(json!({
+                    Ok(token) => Ok(Json(json!({
                         "status": "success",
                         "message": "Logged in with token",
                         "token": token
-                    })),
-                    Err(e) => {
-                        Json(json!({
-                            "status": "error",
-                            "message": "Could not generate session token"
-                        }))
-                    }
+                    }))),
+                    Err(e) => Err(e)
                 }
             }
         },
         Err(e) => {
             error!("Failed to login: {}", e);
-            Json(json!({
-                "status": "unathorized",
-                "message": "Email or Password is not correct",
-            }))
+            Err(AppError::Unauthorized)
         }
     }
 }

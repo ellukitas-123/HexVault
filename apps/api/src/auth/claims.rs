@@ -31,7 +31,7 @@ impl Claims {
             .map_err(|e| {
                 // Use your audit macro to log the real error
                 error!("JWT Encoding Failed: {}", e);
-                AppError::InternalServer("Could not generate session".into())
+                AppError::InternalServer("Could not generate session token".into())
             })
     }
 }

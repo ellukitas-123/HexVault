@@ -2,13 +2,14 @@ pub mod state;
 
 pub mod error;
 pub mod handlers;
+pub mod middlewares;
 pub mod models;
 pub mod utilities;
 pub mod auth;
 
 use std::env;
 use axum::{
-    Router, response::Json, routing::{get, post}
+    Router, response::Json, routing::{get, post}, middleware
 };
 use sqlx::postgres::PgPoolOptions;
 use serde_json::{Value, json};
@@ -46,6 +47,7 @@ async fn main() {
 
     // Application router
     let app = Router::new()
+        .layer(middleware::from_fn(middlewares::response::response_middleware))
         .route("/", get(health_check))
         .route("/auth/register", post(register))
         .route("/auth/salt", get(get_salt))
