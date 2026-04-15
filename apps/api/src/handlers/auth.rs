@@ -1,6 +1,7 @@
-use axum::http::header::SET_COOKIE;
-use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, Json};
+use axum_extra::extract::{CookieJar, cookie};
+use axum_extra::extract::cookie::{Cookie, SameSite};
+use time::Duration;
 use serde_json::{json, Value};
 use crypto::{hash_email, hash_password};
 use crate::error::AppError;
@@ -76,8 +77,9 @@ pub async fn get_salt(
 
 pub async fn login(
     State(state): State<AppState>, // Get database from AppState
+    jar: CookieJar,
     Json(payload): Json<LoginPayload>, // Extract + validate req body
-) -> Result<Json<Value>, AppError> {
+) -> Result<(CookieJar, Json<Value>), AppError> {
     // Query
     let result = sqlx::query!(
         r#"
@@ -101,26 +103,19 @@ pub async fn login(
                 
                 match claims.encode(&state.jwt_secret) {
                     Ok(token) => {
-                        // Create a HeaderMap
-                        let mut headers = HeaderMap::new();
-                        
-                        // Build the secure cookie string
-                        let cookie_str = format!(
-                            "HV_tk={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400",
-                            token
-                        );
-                        
-                        // 3. Insert the Set-Cookie header
-                        headers.insert(
-                            SET_COOKIE,
-                            HeaderValue::from_str(&cookie_str)
-                                .map_err(|_| AppError::InternalServer("Invalid header value".into()))?
-                        );
+                        let cookie = Cookie::build(Cookie::new("HV_tk", token))
+                            .http_only(true)
+                            .secure(true)
+                            .same_site(SameSite::Strict)
+                            .path("/")
+                            .max_age(Duration::days(1))
+                            .build();
 
-                        Ok(Json(json!({
+                        audit!("User Logged In: {}", record.id);
+                        Ok((jar.add(cookie), Json(json!({
                             "status": "success",
                             "message": "Logged in with token saved into cookies",
-                        })))
+                        }))))
                     },
                     Err(e) => Err(e)
                 }

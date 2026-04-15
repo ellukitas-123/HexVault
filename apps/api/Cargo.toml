@@ -27,3 +27,4 @@ uuid = { version = "1.23.0", features = ["serde", "v4"] }
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 chrono = "0.4.44"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
+time = "0.3.47"
