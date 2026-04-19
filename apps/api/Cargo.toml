@@ -28,3 +28,5 @@ jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 chrono = "0.4.44"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 time = "0.3.47"
+validator = { version = "0.20.0", features = ["derive"] }
+axum-valid = { version = "0.24.0", features = ["validator"] }

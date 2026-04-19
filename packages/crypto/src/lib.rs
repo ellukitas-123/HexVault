@@ -1,32 +1,40 @@
-use hmac::{Hmac, KeyInit, Mac};
-use sha2::{Sha256, Digest};
+use argon2::{
+    password_hash::{
+        rand_core::OsRng,
+        PasswordHash, PasswordHasher, PasswordVerifier, SaltString
+    },
+    Argon2, Params, Algorithm, Version
+};
 
-// Alias for HMAC-SHA256
-type HmacSha256 = Hmac<Sha256>;
+// Argon2id parameters: 
+// - Memory: 64 MB (65536 KB)
+// - Iterations: 3
+// - Parallelism: 4
+const MEMORY_SIZE: u32 = 65536;
+const ITERATIONS: u32 = 3;
+const PARALLELISM: u32 = 4;
 
-// Protects against "Pass-the-Hash" attacks.
-// Takes the Argon2 hash sent by the client and hashes it again using SHA-256
+// Hashes a the Argon2id hashed hash (double hashed) using Argon2id (third-hash)
 pub fn hash_password(password_hash: &str) -> String {
-    // Initialize the SHA-256 engine
-    let mut hasher = Sha256::new();
-    hasher.update(password_hash.as_bytes());
-    let result = hasher.finalize();
+    let salt = SaltString::generate(&mut OsRng);
     
-    // Convert the raw bytes into readable Hex string
-    hex::encode(result)
+    let params = Params::new(MEMORY_SIZE, ITERATIONS, PARALLELISM, None)
+        .expect("Invalid Argon2 parameters");
+    
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    
+    argon2.hash_password(password_hash.as_bytes(), &salt)
+        .expect("Failed to hash password")
+        .to_string()
 }
 
-/// Protects against Email Unmasking if the database is stolen.
-/// Mixes the client's SHA-256 email hash with server Pepper.
-pub fn hash_email(email_hash: &str, peeper: &str) -> String {
-    // Initialize the HMAC engine with Peeper
-    let mut mac = HmacSha256::new_from_slice(peeper.as_bytes())
-        .expect("HMAC can take key of any size");
-        
-    // Mix in the email hash from the frontend
-    mac.update(email_hash.as_bytes());
+/// Verifies a password against a provided Argon2id hash.
+pub fn verify_password(password: &str, hash: &str) -> bool {
+    let parsed_hash = PasswordHash::new(hash).expect("Invalid hash format");
     
-    // Finalize and convert to a hex string
-    let result = mac.finalize();
-    hex::encode(result.into_bytes())
+    // Argon2::verify_password uses the parameters stored in the hash string, 
+    // so we don't strictly need to pass the custom params here for verification,
+    // but initializing with Argon2id is correct.
+    Argon2::default().verify_password(password.as_bytes(), &parsed_hash).is_ok()
 }
+

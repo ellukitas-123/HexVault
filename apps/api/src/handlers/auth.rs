@@ -1,9 +1,10 @@
 use axum::{extract::State, Json};
-use axum_extra::extract::{CookieJar, cookie};
+use axum_extra::extract::{CookieJar};
 use axum_extra::extract::cookie::{Cookie, SameSite};
+use axum_valid::Valid;
 use time::Duration;
 use serde_json::{json, Value};
-use crypto::{hash_email, hash_password};
+use crypto::{hash_password};
 use crate::error::AppError;
 use crate::{audit, error};
 use crate::state::AppState;
@@ -12,18 +13,20 @@ use crate::auth::claims::Claims;
 
 pub async fn register(
     State(state): State<AppState>, // Get database from AppState
-    Json(payload): Json<RegisterPayload>, // Extract + validate req body
+    Valid(Json(payload)): Valid<Json<RegisterPayload>>, // Automatically validate
 ) -> Result<Json<Value>, AppError> {
     // Query
     let result = sqlx::query!(
         r#"
-        INSERT INTO users (email_hash, master_password_hash, salt)
-        VALUES ($1, $2, $3)
+        INSERT INTO users (email, master_password_hash, salt, encrypted_private_key, public_key)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id
         "#,
-        hash_email(&payload.email, &state.email_peeper),
+        &payload.email,
         hash_password(&payload.password),
-        payload.salt
+        &payload.salt,
+        &payload.encrypted_private_key,
+        &payload.public_key
     )
     .fetch_one(&state.db) // Execute the query using our DB pool
     .await;
@@ -47,16 +50,16 @@ pub async fn register(
 
 pub async fn get_salt(
     State(state): State<AppState>, // Get database from AppState
-    Json(payload): Json<GetSaltPayload>, // Extract + validate req body
+    Valid(Json(payload)): Valid<Json<GetSaltPayload>>, // Automatically validate
 ) -> Result<Json<Value>, AppError> {
     // Query
     let result = sqlx::query!(
         r#"
         SELECT salt
         FROM users
-        WHERE email_hash = $1
+        WHERE email = $1
         "#,
-        hash_email(&payload.email, &state.email_peeper),
+        &payload.email,
     )
     .fetch_one(&state.db) // Execute the query using our DB pool
     .await;
@@ -78,16 +81,16 @@ pub async fn get_salt(
 pub async fn login(
     State(state): State<AppState>, // Get database from AppState
     jar: CookieJar,
-    Json(payload): Json<LoginPayload>, // Extract + validate req body
+    Valid(Json(payload)): Valid<Json<LoginPayload>>, // Automatically validate
 ) -> Result<(CookieJar, Json<Value>), AppError> {
     // Query
     let result = sqlx::query!(
         r#"
         SELECT master_password_hash, id
         FROM users
-        WHERE email_hash = $1
+        WHERE email = $1
         "#,
-        hash_email(&payload.email, &state.email_peeper),
+        &payload.email,
     )
     .fetch_one(&state.db) // Execute the query using our DB pool
     .await;

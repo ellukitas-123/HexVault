@@ -25,8 +25,6 @@ async fn main() {
 
     let db_url = env::var("DATABASE_URL")
         .expect(&fatal_str!("env DATABASE_URL is not set"));
-    let email_peeper = env::var("EMAIL_PEEPER")
-        .expect(&fatal_str!("env EMAIL_PEEPER is not set"));
     let jwt_secret = env::var("JWT_SECRET")
         .expect(&fatal_str!("env JWT_SECRET is not set"));
 
@@ -41,7 +39,6 @@ async fn main() {
     // Set state
     let state = AppState { 
         db: pool,
-        email_peeper: email_peeper,
         jwt_secret: jwt_secret
     };
 

@@ -5,6 +5,5 @@ use sqlx::PgPool;
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
-    pub email_peeper: String,
     pub jwt_secret: String
 }
