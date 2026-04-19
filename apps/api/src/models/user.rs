@@ -6,6 +6,8 @@ pub struct RegisterPayload {
     pub email: String,
     pub password: String,
     pub salt: String,
+    pub encrypted_private_key: String,
+    pub public_key: String
 }
 
 #[derive(Deserialize)]
