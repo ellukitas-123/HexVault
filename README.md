@@ -31,6 +31,10 @@ Most commercial password managers block some important features like TOTP or Pas
 - **Activity Logs**: Keep track of access and changes to your vaults with detailed activity logs.
 - **More to come...**: We have many more features planned for the future, and we are open to suggestions from the community!
 
+### Long term vision
+
+- **Quantum-resistant cryptography**: As quantum computing advances, we plan to implement quantum-resistant cryptographic algorithms to ensure the long-term security of your data.
+
 ## Tech Stack
 
 - **Backend**: Rust, Axum, SQLx, PostgreSQL.
@@ -42,13 +46,13 @@ Most commercial password managers block some important features like TOTP or Pas
 
 HexVault operates on a zero-knowledge principle, meaning that the server and database never have access to your plaintext passwords or sensitive data. Here's a high-level overview of how it works:
 
-1. **User Authentication**: When you create an account, you generate a Master Password on your device. This password is never sent to the server. Instead, a derived key (using Argon2id) is used for authentication and encryption. After deriving this key, a random Asymmetric User Keypair is generated. The public key is stored in the database while the private key is encrypted with the derived key (symmetric) and stored in the database as well. This double encryption is used for faster and safer Master Password rotation without compromising security. For logging in, the derived key is again hashed to send it as if it was a password, but the server never has access to the Master Password or the derived key in plaintext.
+1. **User Authentication**: When you create an account, you generate a Master Password on your device. This password is never sent to the server. Instead, a derived key (using Argon2id) is used for authentication and encryption. After deriving this key, a random Asymmetric User Keypair is generated with CSPRNG (private key) + X25519 (public key). The public key is stored in the database while the private key is encrypted with the derived key (symmetric) and stored in the database as well. This double encryption is used for faster and safer Master Password rotation without compromising security. For logging in, the derived key is again hashed via SHA-256 and to send it as if it was a password and hash it again using argon2id in the server (for potential database steal), but the server never has access to the Master Password or the derived key in plaintext.
 
-2. **Creating a Vault**: When you create a vault, a new Symmetric Vault Key is generated for that vault. This key is encrypted with your public key and stored in the database. The vault's metadata (name, description, etc.) is also stored in the database. Each vault has its own Symmetric Vault Key to enable sharing (explained later).
+2. **Creating a Vault**: When you create a vault, a new Symmetric Vault Key is generated for that vault with a CSPRNG (Cryptographically Secure Pseudo-Random Number Generator). This key is encrypted with your public key and stored in the database. The vault's metadata (name, description, etc.) is also stored in the database. Each vault has its own Symmetric Vault Key to enable sharing (explained later).
 
-3. **Adding Credentials**: When you add a new credential to a vault, the credential data is encrypted on your device using the vault's Symmetric Key before being sent to the server. The server again only stores the encrypted data. Remember that the vault's Symmetric Key is encrypted with your public key, so only you can decrypt it with your private key, or if you shared the vault, the recipient can decrypt it with their private key.
+3. **Adding Credentials**: When you add a new credential to a vault, the credential data is encrypted on your device using the vault's Symmetric Key with AES-256-GCM before being sent to the server. The server again only stores the encrypted data. Remember that the vault's Symmetric Key is encrypted with your public key, so only you can decrypt it with your private key, or if you shared the vault, the recipient can decrypt it with their private key.
 
-4. **Accessing Credentials**: When you access your vault, the app retrieves the encrypted vault key from the server and decrypts it using your private key. Then, it uses the decrypted vault key to decrypt the credentials stored in that vault.
+4. **Accessing Credentials**: When you access your vault, the app retrieves the encrypted vault key from the server and decrypts it using your private key again with AES-256-GCM. Then, it uses the decrypted vault key to decrypt the credentials stored in that vault.
 
 5. **Sharing Vaults**: If you choose to share a vault, the vault's Symmetric Key is encrypted with the recipient's public key and stored in the database. The recipient can then decrypt the vault key with their private key and access the shared vault. ONLY SHARE VAULTS WITH TRUSTED USERS, AS THEY CAN DECRYPT THE VAULT KEY AND ACCESS ALL CREDENTIALS IN THAT VAULT.
 
