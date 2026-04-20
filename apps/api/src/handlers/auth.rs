@@ -4,7 +4,7 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 use axum_valid::Valid;
 use time::Duration;
 use serde_json::{json, Value};
-use crypto::{hash_password};
+use crypto::{hash_password, verify_password};
 use crate::error::AppError;
 use crate::{audit, error};
 use crate::state::AppState;
@@ -18,13 +18,14 @@ pub async fn register(
     // Query
     let result = sqlx::query!(
         r#"
-        INSERT INTO users (email, master_password_hash, salt, encrypted_private_key, public_key)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO users (email, master_password_hash, salt, nonce, encrypted_private_key, public_key)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         "#,
         &payload.email,
         hash_password(&payload.password),
         &payload.salt,
+        &payload.nonce,
         &payload.encrypted_private_key,
         &payload.public_key
     )
@@ -98,7 +99,7 @@ pub async fn login(
     // Check and send result
     match result {
         Ok(record) => {
-            if record.master_password_hash != hash_password(&payload.password) {
+            if !verify_password(&payload.password, &record.master_password_hash) {
                 error!("Failed to login (bad password)");
                 Err(AppError::Unauthorized)
             } else {
