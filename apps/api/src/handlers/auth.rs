@@ -20,14 +20,13 @@ pub async fn register(
     // Query
     let result = sqlx::query!(
         r#"
-        INSERT INTO users (email, master_password_hash, salt, nonce, encrypted_private_key, public_key)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (email, master_password_hash, salt, encrypted_private_key, public_key)
+        VALUES ($1, $2, decode($3, 'base64'), decode($4, 'base64'), decode($5, 'base64'))
         RETURNING id
         "#,
         &payload.email,
         hash_password(&payload.password),
         &payload.salt,
-        &payload.nonce,
         &payload.encrypted_private_key,
         &payload.public_key
     )
@@ -56,7 +55,7 @@ pub async fn get_salt(
     // Query
     let result = sqlx::query!(
         r#"
-        SELECT salt
+        SELECT encode(salt, 'base64') AS salt
         FROM users
         WHERE email = $1
         "#,
@@ -135,7 +134,9 @@ pub async fn get_asymmetric_key(
     // Query
     let result = sqlx::query!(
         r#"
-        SELECT public_key, encrypted_private_key, nonce
+        SELECT
+            encode(public_key, 'base64') AS public_key,
+            encode(encrypted_private_key, 'base64') AS encrypted_private_key
         FROM users
         WHERE id = $1
         "#,
@@ -151,7 +152,6 @@ pub async fn get_asymmetric_key(
             Ok(Json(json!({
                 "public_key": record.public_key,
                 "encrypted_private_key": record.encrypted_private_key,
-                "nonce": record.nonce
             })))
         },
         Err(e) => {
