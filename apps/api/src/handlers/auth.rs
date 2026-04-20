@@ -1,4 +1,5 @@
 use axum::{extract::State, Json};
+use uuid::Uuid;
 use axum_extra::extract::{CookieJar};
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use axum_valid::Valid;
@@ -10,6 +11,7 @@ use crate::{audit, error};
 use crate::state::AppState;
 use crate::models::user::{GetSaltPayload, LoginPayload, RegisterPayload};
 use crate::auth::claims::Claims;
+use axum::Extension;
 
 pub async fn register(
     State(state): State<AppState>, // Get database from AppState
@@ -38,8 +40,6 @@ pub async fn register(
             audit!("New User Registered: {}", record.id);
 
             Ok(Json(json!({
-                "status": "success",
-                "message": "User securely registered",
                 "user_id": record.id
             })))
         },
@@ -68,8 +68,6 @@ pub async fn get_salt(
     // Check and send result
     match result {
         Ok(record) => Ok(Json(json!({
-                "status": "success",
-                "message": "Salt retrieved",
                 "salt": record.salt
             }))),
         Err(e) => {
@@ -117,8 +115,6 @@ pub async fn login(
 
                         audit!("User Logged In: {}", record.id);
                         Ok((jar.add(cookie), Json(json!({
-                            "status": "success",
-                            "message": "Logged in with token saved into cookies",
                         }))))
                     },
                     Err(e) => Err(e)
@@ -127,6 +123,39 @@ pub async fn login(
         },
         Err(e) => {
             error!("Failed to login: {}", e);
+            Err(AppError::Unauthorized)
+        }
+    }
+}
+
+pub async fn get_asymmetric_key(
+    State(state): State<AppState>, // Get database from AppState
+    Extension(user_id): Extension<Uuid>, // Get authenticated user id from Extension
+) -> Result<Json<Value>, AppError> {
+    // Query
+    let result = sqlx::query!(
+        r#"
+        SELECT public_key, encrypted_private_key, nonce
+        FROM users
+        WHERE id = $1
+        "#,
+        user_id,
+    )
+    .fetch_one(&state.db)
+    .await;
+
+    match result {
+        Ok(record) => {
+
+            audit!("User retrieved asymmetric key: {}", user_id);
+            Ok(Json(json!({
+                "public_key": record.public_key,
+                "encrypted_private_key": record.encrypted_private_key,
+                "nonce": record.nonce
+            })))
+        },
+        Err(e) => {
+            error!("Failed to get asymmetric key: {}", e);
             Err(AppError::Unauthorized)
         }
     }

@@ -30,7 +30,6 @@ pub async fn response_middleware(req: Request<Body>, next: Next) -> Response<Bod
     let unified_body = if status.is_success() {
         json!({
             "status": "success",
-            "message": "Operation completed successfully",
             "data": original_json
         })
     } else {

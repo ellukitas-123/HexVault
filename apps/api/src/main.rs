@@ -1,21 +1,22 @@
 pub mod state;
 
-pub mod error;
-pub mod handlers;
+pub mod routes;
 pub mod middlewares;
+pub mod handlers;
+pub mod error;
 pub mod models;
 pub mod utilities;
 pub mod auth;
 
 use std::env;
 use axum::{
-    Router, response::Json, routing::{get, post}, middleware
+    Router, response::Json, routing::{get}, middleware
 };
 use sqlx::postgres::PgPoolOptions;
 use serde_json::{Value, json};
 
 use crate::state::AppState;
-use crate::handlers::auth::{register, get_salt, login};
+
 
 // The #[tokio::main] macro tells Rust to run this main function 
 // using the Tokio async engine.
@@ -44,11 +45,9 @@ async fn main() {
 
     // Application router
     let app = Router::new()
-        .layer(middleware::from_fn(middlewares::response::response_middleware))
         .route("/", get(health_check))
-        .route("/auth/register", post(register))
-        .route("/auth/salt", get(get_salt))
-        .route("/auth/login", get(login))
+        .nest("/auth", routes::auth::auth_router(state.clone()))
+        .layer(middleware::from_fn(middlewares::response::response_middleware))
         .with_state(state);
 
     // Listening address + port
